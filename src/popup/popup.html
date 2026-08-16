@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Guard Rails</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; width: 330px; margin: 0; padding: 16px; font-size: 13px; }
+      h1 { font-size: 15px; margin: 0 0 2px; }
+      .tag { color: #777; font-size: 11.5px; margin-bottom: 14px; }
+      section { margin-bottom: 14px; }
+      .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0; }
+      label { font-weight: 500; }
+      select, input[type="text"] { padding: 5px; border-radius: 6px; border: 1px solid #8884; background: #fff; color: inherit; }
+      .hint { color: #888; font-size: 11px; margin-top: 2px; }
+      .site { display: flex; align-items: center; justify-content: space-between; padding: 3px 0; }
+      .pill { background: #18a05b14; color: #18a05b; border: 1px solid #18a05b33; padding: 3px 8px; border-radius: 20px; font-size: 11px; }
+      .pill.warn { background: #b3261e14; color: #b3261e; border-color: #b3261e33; }
+      button { border: 0; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-weight: 600; }
+      .save { background: #1f6feb; color: #fff; width: 100%; }
+      .save:hover { background: #1a5ecd; }
+      #tf-switch { position: relative; width: 40px; height: 22px; }
+      #tf-switch input { opacity: 0; width: 0; height: 0; }
+      .slider { position: absolute; inset: 0; background: #bbb; border-radius: 22px; transition: .2s; }
+      .slider::before { content: ""; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px; background: #fff; border-radius: 50%; transition: .2s; }
+      #tf-switch input:checked + .slider { background: #1f6feb; }
+      #tf-switch input:checked + .slider::before { transform: translateX(18px); }
+    </style>
+  </head>
+  <body>
+    <h1>🛡️ Privacy Guard Rails</h1>
+    <div class="tag">100% local · zero data leak · works offline</div>
+
+    <section>
+      <div class="row">
+        <label for="enabled">Enable protection</label>
+        <span id="tf-switch"><input type="checkbox" id="enabled" /><span class="slider"></span></span>
+      </div>
+    </section>
+
+    <section>
+      <div class="row">
+        <label for="strictness">Detection strictness</label>
+        <select id="strictness">
+          <option value="1">Lenient (more hits)</option>
+          <option value="2" selected>Balanced</option>
+          <option value="3">Strict (fewer false positives)</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="ocrLang">OCR languages</label>
+        <select id="ocrLang">
+          <option value="eng">English</option>
+          <option value="chi_sim">简体中文</option>
+          <option value="eng+chi_sim" selected>English + 简体中文</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="autoRedact">Default to auto-redact</label>
+        <input type="checkbox" id="autoRedact" style="width:16px;height:16px" />
+      </div>
+    </section>
+
+    <section>
+      <div class="row">
+        <label for="keywords">Extra keywords (comma separated)</label>
+      </div>
+      <input type="text" id="keywords" style="width:100%; box-sizing:border-box" placeholder="Project-X, 董事会决议, username" />
+      <div class="hint">Company / project-specific terms to always flag.</div>
+    </section>
+
+    <section id="sites"></section>
+
+    <section>
+      <button class="save" id="save">Save settings</button>
+      <div class="hint" id="status" style="margin-top:6px"></div>
+    </section>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

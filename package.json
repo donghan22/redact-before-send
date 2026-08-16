@@ -1,0 +1,23 @@
+{
+  "name": "redact-before-send",
+  "version": "0.1.0",
+  "description": "Zero-data-leak browser extension: detects & auto-redacts sensitive info in images before they reach AI chat platforms.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "fetch-assets": "node scripts/fetch-assets.mjs",
+    "setup": "npm install && npm run fetch-assets && npm run build",
+    "test:scan": "node scripts/test-scan.mjs",
+    "test:ocr": "node scripts/smoke-ocr.mjs"
+  },
+  "dependencies": {
+    "tesseract.js": "^5.1.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  },
+  "allowScripts": {
+    "esbuild@0.24.2": true
+  }
+}

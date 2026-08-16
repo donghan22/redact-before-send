@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "Privacy Guard Rails — PII Auto-Redact",
+  "version": "0.1.0",
+  "description": "Zero-data-leak guard: detects and auto-redacts sensitive info (API keys, ID numbers, phones) in images before they are uploaded to AI chat platforms. 100% local, offline capable.",
+  "permissions": ["storage", "offscreen"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "background": {
+    "service_worker": "dist/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://chat.deepseek.com/*",
+        "https://gemini.google.com/*"
+      ],
+      "js": ["dist/content.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_popup": "dist/popup.html",
+    "default_title": "Privacy Guard Rails"
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/tesseract/*"
+      ],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://chat.deepseek.com/*",
+        "https://gemini.google.com/*"
+      ]
+    }
+  ]
+}
