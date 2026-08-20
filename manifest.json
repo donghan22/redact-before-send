@@ -1,15 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Privacy Guard Rails — PII Auto-Redact",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "description": "Zero-data-leak guard: detects and auto-redacts sensitive info (API keys, ID numbers, phones) in images before they are uploaded to AI chat platforms. 100% local, offline capable.",
   "permissions": ["storage", "offscreen"],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
   "background": {
-    "service_worker": "dist/background.js",
-    "type": "module"
+    "service_worker": "dist/background.js"
   },
   "content_scripts": [
     {
@@ -20,9 +19,26 @@
         "https://chat.deepseek.com/*",
         "https://gemini.google.com/*"
       ],
+      "js": ["dist/page-intercept.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://chat.deepseek.com/*",
+        "https://gemini.google.com/*"
+      ],
       "js": ["dist/content.js"],
       "run_at": "document_start",
-      "all_frames": false
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
     }
   ],
   "action": {

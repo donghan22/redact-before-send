@@ -8,6 +8,8 @@
     "build": "node esbuild.mjs",
     "fetch-assets": "node scripts/fetch-assets.mjs",
     "setup": "npm install && npm run fetch-assets && npm run build",
+    "test:overlay": "node scripts/test-overlay-i18n.mjs",
+    "test:popup": "node scripts/test-popup-i18n.mjs",
     "test:scan": "node scripts/test-scan.mjs",
     "test:ocr": "node scripts/smoke-ocr.mjs"
   },

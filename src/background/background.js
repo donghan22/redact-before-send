@@ -85,32 +85,31 @@ async function waitUntilOffscreenReady(timeoutMs = 5000, intervalMs = 50) {
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
-  console.warn("[PGR:background] offscreen document did not become ready in time");
+  throw new Error("Offscreen document did not become ready in time");
 }
 
-// Content scripts can't message the offscreen document directly — route
-// through this service worker.
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type === "ping") {
-    sendResponse({ ok: true });
-    return;
-  }
-  if (msg?.type === "pgr-ocr-run") {
-    // Relay under a distinct type so this doesn't risk being picked back up
-    // by this same listener (message type namespaces content->background
-    // from background->offscreen explicitly, rather than relying on
-    // sendMessage-doesn't-loop-to-self being guaranteed behaviour).
+// Keep OCR results on a Port instead of a long-lived sendMessage response.
+// Chrome can close the latter while an MV3 service worker/offscreen document
+// is starting, which leaves the content script with no response at all.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "pgr-ocr") return;
+  port.onMessage.addListener((msg) => {
+    if (msg?.type !== "pgr-ocr-run") return;
     (async () => {
+      let result;
       try {
         await ensureOffscreenDocument();
         console.log("[PGR:background] offscreen ready, forwarding OCR request");
-        const res = await chrome.runtime.sendMessage({ ...msg, type: "pgr-ocr-exec" });
-        sendResponse(res);
+        result = await chrome.runtime.sendMessage({ ...msg, type: "pgr-ocr-exec" });
       } catch (err) {
         console.error("[PGR:background] OCR relay failed:", err);
-        sendResponse({ ok: false, error: String((err && err.message) || err) });
+        result = { ok: false, error: String((err && err.message) || err) };
+      }
+      try {
+        port.postMessage({ requestId: msg.requestId, result });
+      } catch {
+        // The tab navigated away while OCR was running.
       }
     })();
-    return true; // keep channel open for async sendResponse
-  }
+  });
 });

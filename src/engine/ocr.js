@@ -18,6 +18,40 @@ function blobToDataUrl(blob) {
   });
 }
 
+let port;
+const pending = new Map();
+
+function getPort() {
+  if (port) return port;
+  port = chrome.runtime.connect({ name: "pgr-ocr" });
+  port.onMessage.addListener(({ requestId, result }) => {
+    const request = pending.get(requestId);
+    if (!request) return;
+    pending.delete(requestId);
+    request.resolve(result);
+  });
+  port.onDisconnect.addListener(() => {
+    const error = new Error(chrome.runtime.lastError?.message || "OCR connection closed");
+    for (const request of pending.values()) request.reject(error);
+    pending.clear();
+    port = null;
+  });
+  return port;
+}
+
+function sendOcrRequest(message) {
+  const requestId = crypto.randomUUID();
+  return new Promise((resolve, reject) => {
+    pending.set(requestId, { resolve, reject });
+    try {
+      getPort().postMessage({ ...message, requestId });
+    } catch (err) {
+      pending.delete(requestId);
+      reject(err);
+    }
+  });
+}
+
 /**
  * OCR a Blob returning lines with bboxes in *original* image pixels.
  * @param {Blob} blob image file
@@ -25,7 +59,7 @@ function blobToDataUrl(blob) {
  */
 export async function ocrLines(blob, settings) {
   const dataUrl = await blobToDataUrl(blob);
-  const res = await chrome.runtime.sendMessage({
+  const res = await sendOcrRequest({
     type: "pgr-ocr-run",
     dataUrl,
     lang: settings.ocrLang || "eng+chi_sim",

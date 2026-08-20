@@ -1,170 +1,256 @@
-# 🛡️ Privacy Guard Rails
+<p align="center">
+  <img src="./assets/icon128.png" width="88" alt="Privacy Guard Rails logo" />
+</p>
 
-**Zero-data-leak guard for AI chat screen-shots.** Detects and auto-redacts sensitive
-information (API keys, Chinese ID numbers, mobile numbers, emails, crypto addresses,
-company-confidential keywords) in images **before** they are uploaded to ChatGPT,
-Claude.ai, DeepSeek, or Gemini.
+<h1 align="center">Privacy Guard Rails</h1>
 
-100% local. Nothing — not the image, not the OCR output, not the detection result —
-ever leaves your device. It works with the network **off**.
+<p align="center">
+  Detect, review, and redact sensitive information locally before an image enters an AI chat.<br />
+  Local OCR · No cloud detection API · Works offline
+</p>
 
-> ⚠️ Why this exists: accidentally pasting a screenshot containing an `sk-...` key,
-> an ID card, or a bank number into ChatGPT is one of the safest ways to leak secrets —
-> many companies have banned chat tools over exactly this. This extension is the
-> interceptor that catches it before the click.
+<p align="center">
+  <img alt="Chrome MV3" src="https://img.shields.io/badge/Chrome-MV3-2563eb?style=flat-square" />
+  <img alt="Local OCR" src="https://img.shields.io/badge/OCR-Tesseract.js-15803d?style=flat-square" />
+  <img alt="Languages" src="https://img.shields.io/badge/UI-中文%20%7C%20English-7c3aed?style=flat-square" />
+  <img alt="Tests" src="https://img.shields.io/badge/rule_tests-20%2F20-brightgreen?style=flat-square" />
+</p>
 
----
-
-## ✨ What it does
-
-1. **Intercepts** image entry at the moment you paste / drag / attach it (capture-phase
-   listener, before the site's own handler runs).
-2. **OCR + rules**: the image is relayed to a `chrome.offscreen` document (see
-   "Why an offscreen document" below) where Tesseract.js runs entirely locally and
-   checks the text against ~15 patterns — including checksum-validated CN ID and
-   Luhn-validated bank cards, so it **doesn't over-flag** every random number.
-3. **Highlights** the risky zones on a review dialog.
-4. **One-click auto-redact**: mosaics the sensitive pixels via Canvas and uploads the
-   *safe* image instead — the sender never leaks.
-
-```
-paste / drop / attach image (content script, host page's execution context)
-   │  (capture-phase, preventDefault)
-   ▼
-chrome.runtime.sendMessage ──▶ background service worker ──▶ offscreen document
-                                                                   │
-                                                            OCR (Tesseract.js Worker)
-                                                                   │
-   regex + keywords ──▶ zones with pixel boxes  ◀──────────────────┘
-   │                                                  │
-   │  no risk → pass through                          │  risk → review dialog
-   │                                                  ├─ Cancel (block)
-   │                                                  ├─ Ignore & upload
-   │                                                  └─ Auto-redact ──▶ Canvas mosaic ──▶ re-inject safe image
-```
-
-### Why an offscreen document?
-
-The content script runs inside the **host page's** execution context, which means
-any `Worker` it constructs is bound by *that page's* Content-Security-Policy. Some AI
-platforms declare a `worker-src` that has no `blob:` (Gemini does this), which silently
-blocks Worker construction — no error a user would notice, the OCR path just breaks.
-`chrome.offscreen` documents run under the **extension's own** CSP instead, so OCR
-lives there and is unaffected by whatever CSP any given AI site ships. The relay path
-is: content script → background service worker (owns the offscreen doc's lifecycle) →
-offscreen document (runs the Tesseract.js Worker) → result flows back the same way.
+<p align="center">
+  <a href="./README.zh-CN.md">简体中文</a> · <strong>English</strong>
+</p>
 
 ---
 
-## 📦 What's in the box
+Privacy Guard Rails is a Manifest V3 browser extension that intercepts images before
+they are submitted to ChatGPT, Claude, DeepSeek, or Gemini. It extracts text with a
+local Tesseract OCR worker, then uses checksums, regular expressions, and contextual
+rules to locate potentially sensitive regions.
 
-| Piece | File | Notes |
+When a risk is found, the user can:
+
+- cancel the upload;
+- ignore the warning and upload the original;
+- automatically mosaic detected regions and review the result;
+- drag over any additional region in the preview before uploading the safe version.
+
+> [!IMPORTANT]
+> This extension is a pre-upload safety aid, not a complete enterprise DLP system.
+> Read [Limitations](#limitations) before using it in a sensitive workflow. It must
+> not be treated as a guarantee that every secret will be detected.
+
+## Detection Preview
+
+<p align="center">
+  <img src="./docs/detection-examples.svg" width="900" alt="Synthetic API key, identity number, and IBAN detection and redaction examples" />
+</p>
+
+The illustration uses synthetic values only. It contains no real identity number,
+bank account, or secret.
+
+## Core Flow
+
+~~~mermaid
+flowchart LR
+    A["Paste / Drop / Attach image"] --> B["Pre-upload interception"]
+    B --> C["Local OCR<br/>English + Simplified Chinese"]
+    C --> D["Rules, context, and checksums"]
+    D --> E{"Risk found?"}
+    E -- No --> F["Continue the original upload flow"]
+    E -- Yes --> G["Bilingual review UI<br/>Highlight detected regions"]
+    G --> H["Cancel"]
+    G --> I["Ignore and upload original"]
+    G --> J["Auto-redact and review"]
+    J --> K["Add manual redactions"]
+    K --> L["Upload safe version"]
+~~~
+
+## What It Detects
+
+The current engine contains **22 structured rules**, dedicated PEM/SSH private-key
+block handling, built-in keywords, and user-defined sensitive terms.
+
+| Category | Current coverage | False-positive controls |
 |---|---|---|
-| Manifest (MV3) | `manifest.json` | **Permissions: `storage`, `offscreen`**. No host permissions, no network calls. |
-| Content script | `src/content/content.js` + `intercept.js`, `overlay.js` | Capture listeners, shadow-DOM dialog, zone rendering. Relays images to the offscreen doc for OCR — never spawns a Worker itself. |
-| Background service worker | `src/background/background.js` | Owns the offscreen document's lifecycle (`chrome.offscreen.createDocument`), relays OCR requests to it. |
-| Offscreen OCR | `src/offscreen/offscreen.js` (+ `offscreen.html`) | Runs Tesseract.js (via its own Worker) under the extension's CSP. Downscales, offline core+lang, returns bboxes in original pixels. |
-| Detection rules | `src/shared/sensitive.js` | Regex + CN-ID checksum + Luhn + boundary heuristics + keyword list. |
-| Redaction | `src/engine/redact.js` | Pixel-mosaic via Canvas, pure local. |
-| Options popup | `src/popup/*` | Strictness, languages, per-site toggles, extra keywords. |
+| API and cloud credentials | OpenAI, Anthropic, AWS, Google, GitHub, JWT | Vendor prefixes and length constraints |
+| Authentication credentials | OAuth, access/refresh tokens, bearer tokens, session cookies | Field context and token formats |
+| Private keys and databases | PEM, RSA, EC, DSA, OpenSSH private keys; database URLs | Redacts the complete key block from <code>BEGIN</code> through <code>END</code> |
+| Identity and contact data | Chinese IDs, passports, US SSNs, Chinese phone numbers, email addresses | ID checksum, invalid SSN filtering, and field context |
+| Business identifiers | Chinese unified social credit codes and tax identifiers | MOD 31-3 checksum or field context |
+| Financial data | Payment cards, bank accounts, IBANs, BTC and ETH addresses | Luhn, IBAN MOD-97, and field context |
+| Document keywords | Confidential, internal use, financial reports, and similar terms | Built-in and user-defined keyword lists |
 
----
+Passport numbers, generic tax identifiers, and bank-account numbers do not have one
+global format. They are detected only when OCR also finds a nearby label such as
+<code>Passport No</code>, <code>Tax ID</code>, <code>Bank Account</code>,
+<code>护照号码</code>, <code>税号</code>, or <code>银行账号</code>.
 
-## 🚀 Install from source
+## Supported Websites
 
-```bash
-npm run setup        # install deps + fetch offline OCR assets + build
-```
+| Website | Domain | Paste | Drop | Attachment button |
+|---|---|:---:|:---:|:---:|
+| ChatGPT | <code>chatgpt.com</code> | ✓ | ✓ | ✓, including MAIN-world and File System paths |
+| Claude | <code>claude.ai</code> | ✓ | ✓ | ✓ |
+| DeepSeek | <code>chat.deepseek.com</code> | ✓ | ✓ | ✓ |
+| Gemini | <code>gemini.google.com</code> | ✓ | ✓ | ✓ |
 
-Then load in Chrome/Edge:
+Web applications change continuously. Re-run end-to-end browser checks after a
+browser or website update.
 
-1. Open `chrome://extensions` (Edge: `edge://extensions`).
-2. Toggle **Developer mode**.
-3. **Load unpacked** → select this folder (`pri_image/`).
-4. Open chatgpt.com / claude.ai / deepseek / gemini and paste a screenshot that contains
-   something like `sk-proj-...` — the dialog appears.
+## Local Privacy Architecture
 
-> The `setup` downloads ~30 MB of OCR language data **once** (English + Simplified
-> Chinese) and caches it locally. After that the extension is fully offline-capable —
-> a fresh download is never needed at runtime.
+~~~mermaid
+flowchart TB
+    subgraph PAGE["AI chat page"]
+      M["MAIN world<br/>Attachment-picker interception"]
+      I["Isolated content script<br/>Orchestration + Shadow DOM UI"]
+    end
 
-### Demo / trust video idea
-Disconnect your Wi-Fi (or toggle Network Off), drag in a screenshot with an API key,
-watch it get detected and redacted. Record that — it's your best proof of
-zero-data-leak.
+    M <-->|"In-page bridge"| I
+    I <-->|"chrome.runtime Port"| B["MV3 background service worker"]
+    B <-->|"OCR request / result"| O["Offscreen document"]
+    O --> W["Tesseract Worker<br/>WASM SIMD LSTM"]
+    W --> O
+    I --> R["Canvas mosaic<br/>Generate safe image"]
+~~~
 
----
+- OCR engine: <code>tesseract.js 5.1.1</code>.
+- Bundled models: <code>assets/tesseract/eng.traineddata.gz</code> and
+  <code>assets/tesseract/chi_sim.traineddata.gz</code>.
+- Images are downscaled to a maximum side of <code>1440px</code> for OCR; detected
+  coordinates are mapped back to original-image pixels.
+- Runtime detection does not call a cloud OCR or external detection API.
+- Extension permissions are <code>storage</code> and <code>offscreen</code>; content
+  script access is limited to the supported AI-chat domains above.
+- The extension actively reinjects an original or redacted image only after the user
+  chooses to continue.
 
-## 🔒 Privacy & permissions
+<code>npm run setup</code> downloads about 30 MB of English and Simplified Chinese
+OCR model data during setup. Once stored in the repository, runtime OCR works
+offline.
 
-- **One permission: `storage`** (saved settings). That's the entire trust surface.
-- Content scripts are granted only on `chatgpt.com`, `chat.openai.com`, `claude.ai`,
-  `chat.deepseek.com`, `gemini.google.com`.
-- **No outbound network requests.** OCR core, worker glue, and language data are all
-  bundled locally under `assets/tesseract/`. Verify for yourself:
-  `assets/tesseract/*` are the only model files, and the code never calls `fetch()` on a
-  remote URL.
-- OCR runs off the main thread (a Worker) so the page never freezes.
+## Installation
 
----
+~~~bash
+git clone <your-repository-url>
+cd pri_image
+npm run setup
+~~~
 
-## 🧪 Verification
+Then:
 
-```bash
-npm run test:scan   # rule-engine unit tests (paste/drop/change interception is browser-only)
-npm run test:ocr    # headless OCR smoke test on a sample image
-```
+1. Open <code>chrome://extensions</code>; use <code>edge://extensions</code> in Edge.
+2. Enable **Developer mode**.
+3. Select **Load unpacked**.
+4. Choose the repository root.
+5. Open a supported website and test paste, drop, and attachment upload with a
+   synthetic image.
 
-```text
-$ npm run test:scan
-PASS  OpenAI key
-PASS  CN phone split across words
-PASS  CN ID with valid checksum
-PASS  Email Address
-PASS  Keyword: confidential
-PASS  Date must NOT match      ← no false positive
+After editing the source:
+
+~~~bash
+npm run build
+~~~
+
+Select **Reload** on the extension management page. Reload open chat tabs as well so
+the new content scripts are injected.
+
+## Settings and Interaction
+
+- The extension popup supports Chinese and English, and persists the UI language in
+  local browser storage.
+- Protection can be paused globally or enabled per website.
+- OCR can load English, Simplified Chinese, or both.
+- Users can configure detection level and organization-specific keywords.
+- In-page risk review and redaction preview follow the popup language.
+- After auto-redaction, users can draw additional regions, undo, and approve the
+  final upload.
+
+## Verification
+
+~~~bash
+npm run test:scan       # 20 positive and negative rule cases
+npm run test:popup      # popup Chinese/English dictionary completeness
+npm run test:overlay    # review UI translations and zone-label completeness
+npm run test:ocr -- /path/to/test-image.jpg
+npm run build
+~~~
+
+Current rule checks include:
+
+~~~text
+PASS  PEM private key block
+PASS  OAuth access token
+PASS  Session cookie
+PASS  Database connection string
+PASS  US SSN / invalid SSN
+PASS  IBAN / invalid IBAN checksum
+PASS  Chinese unified social credit code / invalid checksum
+PASS  Date must NOT match
 PASS  Long random digits must NOT match
-7/7 passed
+...
+20/20 passed
+~~~
 
-$ npm run test:ocr leak.png
-OCR took 186ms
-  high OpenAI API Key @ (251,11 649x38)
-  high CN Mobile Number @ (145,72 237x30)
-```
+## Project Structure
+
+~~~text
+pri_image/
+├── assets/tesseract/          # WASM, worker, eng / chi_sim OCR models
+├── docs/                      # README visual assets
+├── src/
+│   ├── background/            # Offscreen lifecycle and OCR relay
+│   ├── content/               # Interception, bilingual review UI, redaction preview
+│   ├── engine/                # OCR client and Canvas mosaic
+│   ├── offscreen/             # Tesseract Worker execution environment
+│   ├── popup/                 # Bilingual extension settings
+│   └── shared/                # Configuration, detection rules, checksums
+├── scripts/                   # Model setup and runnable checks
+├── manifest.json
+└── esbuild.mjs
+~~~
+
+## Limitations
+
+1. **OCR can miss or misread text.** Blur, rotation, glare, low contrast, complex
+   backgrounds, and very small text reduce accuracy. Text that OCR misses never
+   reaches the rule engine.
+2. **The current error policy is fail-open.** If OCR initialization or execution
+   fails, the original image is allowed through. This is not suitable as a mandatory
+   compliance gateway.
+3. **Only the first image in one selection is fully processed.** Multi-image uploads
+   still need dedicated handling.
+4. **The engine understands text, not visual objects.** Faces, signatures,
+   fingerprints, license plates, document portraits, QR codes, and barcodes are not
+   reliably detected.
+5. **There is no cross-line semantic model.** Values split into words on one line can
+   be reconstructed, but addresses, keys, or account numbers split across lines may
+   be missed. PEM/SSH private-key blocks are a dedicated exception.
+6. **Contextual rules have regional limits.** SSN currently means a US number.
+   Passport, tax-ID, and bank-account rules depend on Chinese or English field
+   labels and do not cover every country.
+7. **Website upload implementations can change.** Updates involving
+   <code>event.isTrusted</code>, Shadow DOM, the File System API, or other frontend
+   behavior may affect reinjection and require real-browser regression testing.
+8. **EXIF cleanup is not explicit yet.** Generated PNG redactions generally omit the
+   source EXIF data, but choosing “ignore and upload original” preserves original
+   metadata.
+
+## Roadmap
+
+- [x] Paste, drop, and attachment-button interception
+- [x] Local English and Simplified Chinese OCR with sensitive-region coordinates
+- [x] Automatic mosaic, result preview, and manual redaction
+- [x] Chinese/English popup and in-page review interfaces
+- [x] API credentials, private keys, identity, tax, and financial rules
+- [ ] Multi-image processing
+- [ ] Optional fail-closed policy
+- [ ] Explicit EXIF metadata removal
+- [ ] QR-code and barcode parsing
+- [ ] Face, signature, and license-plate detection
+- [ ] Demo GIF recorded from a real end-to-end browser flow
 
 ---
 
-## ⚠️ Known limits (be aware before relying on it)
-
-1. **`event.isTrusted`** — re-injected (synthetic) paste/drop events are not "trusted".
-   Most platforms accept them; some ignore them. The **file-attach path**
-   (assigning `input.files` + firing `change`) is reliable on all of them, but "paste
-   a screenshot" interception depends on each site tolerating an untrusted paste.
-   This is the single most important assumption to verify per site.
-2. **OCR accuracy** — a noisy/low-res screenshot can misread a digit. When in doubt
-   the images aren't *silently* leaked: you always see the review dialog with the
-   highlighted zone and can Cancel or Ignore.
-3. **No visual object detection yet** — we detect *text* PII, not faces / credit-card
-   shapes (that's roadmap M4). A card number in an image *without* readable digits is
-   not yet flagged.
-4. **`run_at` document_start interception** — set for earliest capture; if a site
-   re-renders its composer (SPA), a fesh-but-stable listener remains attached on
-   `document`.
-5. **First OCR call per browser session is slower** — the background service worker
-   spins up the offscreen document and Tesseract.js warms up lazily. Subsequent
-   calls reuse the same offscreen document and cached Tesseract worker.
-
----
-
-## 🗺️ Roadmap
-
-- [x] M1 — interception + OCR + regex detection + review dialog
-- [x] M2 — canvas auto-redact + re-injection
-- [x] M3 — multi-platform (chatgpt / claude / deepseek / gemini) + offline assets
-- [ ] M4 — enterprise policies (central JSON config), visual object recourse,
-      per-platform `isTrusted` hardening, demo-GIF + published story
-
----
-
-*Built with `tesseract.js` and `esbuild`. Not affiliated with OpenAI, Anthropic,
-DeepSeek, or Google.*
+Built with <code>tesseract.js</code> and <code>esbuild</code>. Not affiliated with OpenAI,
+Anthropic, DeepSeek, or Google.

@@ -5,21 +5,37 @@
 // Everything stays local; this file never touches chrome.runtime for detection.
 
 import { installInterception } from "./intercept.js";
-import { showReviewOverlay } from "./overlay.js";
+import { showRedactionPreview, showReviewOverlay } from "./overlay.js";
 import { ocrLines, disposeOcr } from "../engine/ocr.js";
 import { redactImage } from "../engine/redact.js";
 import { detectSensitiveZones } from "../shared/sensitive.js";
 import { loadSettings, isHostEnabled } from "../shared/config.js";
+import { STORAGE_KEYS } from "../shared/constants.js";
 
 let settings = null;
+let syncPageInterception = () => {};
 
 init();
 
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !changes[STORAGE_KEYS.settings]) return;
+  loadSettings().then((next) => {
+    settings = next;
+    syncPageInterception();
+  });
+});
+
 async function init() {
+  // Register before any await: ChatGPT handles file-input changes on document
+  // too, so registering after storage resolves can lose the original event.
+  syncPageInterception = installInterception(
+    () => (settings && isHostEnabled(settings, location.hostname) ? settings : null),
+    handleImage,
+  );
   settings = await loadSettings();
+  syncPageInterception();
   if (!settings.enabled) return;
   if (!isHostEnabled(settings, location.hostname)) return;
-  installInterception(settings, handleImage);
   window.addEventListener("pagehide", disposeOcr, { once: true });
 }
 
@@ -61,7 +77,7 @@ async function handleImage({ file, kind, input, event }) {
   const objectUrl = URL.createObjectURL(file);
   const dims = await imageDimensions(objectUrl);
   console.log("[PGR] 4/5 showing review overlay");
-  const choice = await showReviewOverlay({ objectUrl, dimensions: dims, zones });
+  const choice = await showReviewOverlay({ objectUrl, dimensions: dims, zones, language: settings.uiLanguage });
   URL.revokeObjectURL(objectUrl);
   console.log(`[PGR] 4/5 user choice: ${choice}`);
 
@@ -69,8 +85,13 @@ async function handleImage({ file, kind, input, event }) {
   if (choice === "ignore") return { action: "pass" };
 
   // 4) Redact & return safe blob for reinjection.
-  const blob = await redactImage(file, zones, { mosaic: true });
-  console.log(`[PGR] 5/5 redacted image ready, size=${blob.size}B — reinjecting`);
+  let blob = await redactImage(file, zones, { mosaic: true });
+  const previewUrl = URL.createObjectURL(blob);
+  const review = await showRedactionPreview({ objectUrl: previewUrl, dimensions: dims, language: settings.uiLanguage });
+  URL.revokeObjectURL(previewUrl);
+  if (review.action === "cancel") return { action: "block" };
+  if (review.zones.length) blob = await redactImage(blob, review.zones, { mosaic: true });
+  console.log(`[PGR] 5/5 redacted image approved, size=${blob.size}B — reinjecting`);
   return { action: "replace", blob };
 }
 
