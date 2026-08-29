@@ -72,18 +72,14 @@ async function recognize({ dataUrl, lang, maxSide, corePath, langPath, workerPat
   return { lines: mapped, ms: Math.round(performance.now() - t0) };
 }
 
-console.log("[PGR:offscreen] document loaded, listener registering");
-
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === "pgr-offscreen-ping") {
     sendResponse({ ok: true });
     return;
   }
   if (msg?.type !== "pgr-ocr-exec") return false;
-  console.log("[PGR:offscreen] OCR request received");
   recognize(msg)
     .then((res) => {
-      console.log(`[PGR:offscreen] OCR done in ${res.ms}ms, ${res.lines.length} lines`);
       sendResponse({ ok: true, ...res });
     })
     .catch((err) => {

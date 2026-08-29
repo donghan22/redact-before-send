@@ -19,6 +19,7 @@ const common = {
 };
 
 const targets = [
+  { entryPoints: ["src/content/page-intercept.js"], outfile: "dist/page-intercept.js", ...common },
   { entryPoints: ["src/content/content.js"], outfile: "dist/content.js", ...common },
   { entryPoints: ["src/offscreen/offscreen.js"], outfile: "dist/offscreen.js", ...common },
   { entryPoints: ["src/background/background.js"], outfile: "dist/background.js", ...common, format: "esm" },

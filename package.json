@@ -1,13 +1,23 @@
 {
-  "name": "redact-before-send",
-  "version": "0.1.0",
-  "description": "Zero-data-leak browser extension: detects & auto-redacts sensitive info in images before they reach AI chat platforms.",
+  "name": "privacy-guard-rails",
+  "version": "0.1.4",
+  "description": "Locally detects and redacts sensitive text in images before upload to AI chat platforms.",
   "type": "module",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
+    "prebuild": "node scripts/ocr-assets.mjs",
     "build": "node esbuild.mjs",
     "fetch-assets": "node scripts/fetch-assets.mjs",
-    "setup": "npm install && npm run fetch-assets && npm run build",
+    "setup": "npm ci && npm run fetch-assets && npm run build",
+    "verify:assets": "node scripts/ocr-assets.mjs",
+    "package:extension": "npm run build && node scripts/package-release.mjs",
+    "test": "npm run test:assets && npm run test:scan && npm run test:popup && npm run test:overlay",
+    "test:assets": "node scripts/test-ocr-assets.mjs",
+    "test:overlay": "node scripts/test-overlay-i18n.mjs",
+    "test:popup": "node scripts/test-popup-i18n.mjs",
     "test:scan": "node scripts/test-scan.mjs",
     "test:ocr": "node scripts/smoke-ocr.mjs"
   },
@@ -15,9 +25,10 @@
     "tesseract.js": "^5.1.1"
   },
   "devDependencies": {
-    "esbuild": "^0.24.0"
+    "esbuild": "^0.28.2"
   },
   "allowScripts": {
-    "esbuild@0.24.2": true
+    "esbuild@0.28.2": true,
+    "tesseract.js": false
   }
 }

@@ -36,6 +36,45 @@ function luhnValid(digits) {
   return sum % 10 === 0;
 }
 
+function capturedRange(match, group = 1) {
+  const value = match[group];
+  const start = match.index + match[0].lastIndexOf(value);
+  return { start, end: start + value.length };
+}
+
+function validUsSsn(value) {
+  const match = /^(\d{3})-(\d{2})-(\d{4})$/.exec(value);
+  if (!match) return false;
+  const area = Number(match[1]);
+  return area !== 0 && area !== 666 && area < 900 && match[2] !== "00" && match[3] !== "0000";
+}
+
+function validIban(value) {
+  const iban = value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban)) return false;
+  const rearranged = iban.slice(4) + iban.slice(0, 4);
+  let remainder = 0;
+  for (const char of rearranged) {
+    if (/\d/.test(char)) remainder = (remainder * 10 + Number(char)) % 97;
+    else remainder = (remainder * 100 + char.charCodeAt(0) - 55) % 97;
+  }
+  return remainder === 1;
+}
+
+function validChineseUscc(value) {
+  const alphabet = "0123456789ABCDEFGHJKLMNPQRTUWXY";
+  const weights = [1, 3, 9, 27, 19, 26, 16, 17, 20, 29, 25, 13, 8, 24, 10, 30, 28];
+  const code = value.toUpperCase();
+  if (!/^[159Y][1239]/.test(code) || code.length !== 18 || [...code].some((char) => !alphabet.includes(char))) return false;
+  let sum = 0;
+  for (let i = 0; i < 17; i++) sum += alphabet.indexOf(code[i]) * weights[i];
+  return alphabet[(31 - (sum % 31)) % 31] === code[17];
+}
+
+const PRIVATE_KEY_LABEL = "PEM / SSH Private Key";
+const PRIVATE_KEY_BEGIN = /-----BEGIN(?:RSA|EC|DSA|OPENSSH|ENCRYPTED)?PRIVATEKEY-----/i;
+const PRIVATE_KEY_END = /-----END(?:RSA|EC|DSA|OPENSSH|ENCRYPTED)?PRIVATEKEY-----/i;
+
 // ---- rule definition -------------------------------------------------------
 
 // strictness: 1 = lenient (more hits, more false positives), 3 = only high
@@ -90,6 +129,29 @@ const RULES = [
     re: /eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}/,
   },
   {
+    id: "oauth_token",
+    label: "OAuth / Access Token",
+    severity: "critical",
+    confidence: 0.9,
+    re: /(?:oauth[_-]?(?:access[_-]?|refresh[_-]?)?token|access[_-]?token|refresh[_-]?token|(?:authorization[:：=]?)?bearer)[:：=]*([A-Za-z0-9._~+\/\-]{16,}={0,2})/i,
+    test: (m) => capturedRange(m),
+  },
+  {
+    id: "session_cookie",
+    label: "Session Cookie",
+    severity: "critical",
+    confidence: 0.9,
+    re: /(?:session(?:id|token)?|jsessionid|phpsessid|connect\.sid|sessioncookie|cookie)[:：=]+([A-Za-z0-9._~+\/%\-]{12,}={0,2})/i,
+    test: (m) => capturedRange(m),
+  },
+  {
+    id: "database_url",
+    label: "Database Connection String",
+    severity: "critical",
+    confidence: 0.95,
+    re: /(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|rediss|mssql):\/\/[A-Za-z0-9%._~!$&'()*+,;=:@\/?#\-]{6,}/i,
+  },
+  {
     id: "cn_id",
     label: "Chinese ID Number",
     severity: "critical",
@@ -125,6 +187,59 @@ const RULES = [
     severity: "medium",
     confidence: 0.6,
     re: /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/,
+    test: (m, compact) => {
+      const prefix = compact.slice(0, m.index);
+      if (/(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|rediss|mssql):\/\/[^\s]*$/i.test(prefix)) return null;
+      return { start: m.index, end: m.index + m[0].length };
+    },
+  },
+  {
+    id: "passport_number",
+    label: "Passport Number",
+    severity: "critical",
+    confidence: 0.8,
+    re: /(?:passport(?:no\.?|number|#)|护照(?:号|号码))[:：=#\-]*([A-Z0-9]{5,12})/i,
+    test: (m) => capturedRange(m),
+  },
+  {
+    id: "us_ssn",
+    label: "US Social Security Number",
+    severity: "critical",
+    confidence: 0.95,
+    re: /(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)/,
+    test: (m) => (validUsSsn(m[0]) ? { start: m.index, end: m.index + m[0].length } : null),
+  },
+  {
+    id: "iban",
+    label: "IBAN",
+    severity: "critical",
+    confidence: 1,
+    re: /[A-Z]{2}\d{2}[A-Z0-9]{11,30}/i,
+    test: (m) => (validIban(m[0]) ? { start: m.index, end: m.index + m[0].length } : null),
+  },
+  {
+    id: "chinese_uscc",
+    label: "Chinese Unified Social Credit Code",
+    severity: "critical",
+    confidence: 1,
+    re: /[159Y][1239][0-9A-HJ-NPQRTUWXY]{16}/i,
+    test: (m) => (validChineseUscc(m[0]) ? { start: m.index, end: m.index + m[0].length } : null),
+  },
+  {
+    id: "tax_id",
+    label: "Tax Identification Number",
+    severity: "high",
+    confidence: 0.8,
+    re: /(?:tax(?:payer)?(?:id|number|no\.?)|tin|ein|vat(?:id|number|no\.?)|税号|纳税人识别号)[:：=#\-]*([A-Z0-9\-]{8,20})/i,
+    test: (m) => capturedRange(m),
+  },
+  {
+    id: "bank_account",
+    label: "Bank Account Number",
+    severity: "critical",
+    confidence: 0.8,
+    re: /(?:bankaccount(?:number|no\.?)?|account(?:number|no\.?)|银行(?:账号|账户))[:：=#\-]*(\d{8,34})/i,
+    test: (m) => capturedRange(m),
   },
   {
     id: "eth_address",
@@ -157,10 +272,10 @@ const RULES = [
   },
   {
     id: "named_secret",
-    label: "Named Secret / Token",
+    label: "Named Secret / Password",
     severity: "medium",
     confidence: 0.5,
-    re: /(?:api[_-]?key|apikey|token|secret|password|passwd|私钥|密钥|口令)\s*[=:：]\s*[A-Za-z0-9_\-]{12,}/i,
+    re: /(?:api[_-]?key|apikey|(?<![A-Za-z_])token|secret|password|passwd|私钥|密钥|口令)\s*[=:：]\s*[A-Za-z0-9_\-]{12,}/i,
   },
 ];
 
@@ -213,6 +328,21 @@ export function detectSensitiveZones(lines, options = {}) {
   const strictness = options.strictness ?? 2;
   const extraKeywords = options.keywords ?? [];
   const zones = [];
+
+  // A private-key header is only a marker; the actual secret is the body on
+  // following lines. Redact the full block, or everything after BEGIN if OCR
+  // misses the closing marker.
+  let insidePrivateKey = false;
+  for (const line of lines) {
+    const words = line.words || [{ text: line.text, bbox: line.bbox }];
+    const compact = words.map((word) => word.text || "").join("").replace(/\s/g, "");
+    if (PRIVATE_KEY_BEGIN.test(compact)) insidePrivateKey = true;
+    if (insidePrivateKey) {
+      const bbox = line.bbox || unionWords(words.map((word) => word.bbox));
+      zones.push({ ...bbox, label: PRIVATE_KEY_LABEL, severity: "critical", confidence: 1, kind: "pii" });
+    }
+    if (insidePrivateKey && PRIVATE_KEY_END.test(compact)) insidePrivateKey = false;
+  }
 
   for (const line of lines) {
     const words = line.words ?? [{ text: line.text, bbox: line.bbox }];

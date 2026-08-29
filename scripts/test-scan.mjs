@@ -48,6 +48,84 @@ const cases = [
     ]),
   },
   {
+    name: "PEM private key block",
+    want: true,
+    wantZones: 3,
+    lines: [
+      line("-----BEGIN PRIVATE KEY-----", [{ text: "-----BEGIN PRIVATE KEY-----", bbox: { x: 10, y: 220, w: 260, h: 24 } }]),
+      line("MIIEvQIBADANBgkqhkiG9w0BAQEFAASC", [{ text: "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC", bbox: { x: 10, y: 248, w: 340, h: 24 } }]),
+      line("-----END PRIVATE KEY-----", [{ text: "-----END PRIVATE KEY-----", bbox: { x: 10, y: 276, w: 250, h: 24 } }]),
+    ],
+  },
+  {
+    name: "OAuth access token",
+    want: true,
+    line: line("access_token=ya29.a0AfH6SMB1234567890abcdef"),
+  },
+  {
+    name: "Session cookie",
+    want: true,
+    line: line("JSESSIONID=8F2A1BC904D548A99AC0D722"),
+  },
+  {
+    name: "Database connection string",
+    want: true,
+    wantZones: 1,
+    line: line("postgresql://admin:secret@db.example.com/private"),
+  },
+  {
+    name: "Labelled passport number",
+    want: true,
+    line: line("Passport No: E12345678"),
+  },
+  {
+    name: "US SSN",
+    want: true,
+    line: line("123-45-6789"),
+  },
+  {
+    name: "Invalid US SSN must NOT match",
+    want: false,
+    line: line("000-12-3456"),
+  },
+  {
+    name: "IBAN with valid MOD-97 checksum",
+    want: true,
+    line: line("GB82 WEST 1234 5698 7654 32", [
+      { text: "GB82", bbox: { x: 10, y: 310, w: 50, h: 24 } },
+      { text: "WEST", bbox: { x: 65, y: 310, w: 50, h: 24 } },
+      { text: "1234", bbox: { x: 120, y: 310, w: 50, h: 24 } },
+      { text: "5698", bbox: { x: 175, y: 310, w: 50, h: 24 } },
+      { text: "7654", bbox: { x: 230, y: 310, w: 50, h: 24 } },
+      { text: "32", bbox: { x: 285, y: 310, w: 25, h: 24 } },
+    ]),
+  },
+  {
+    name: "IBAN with invalid checksum must NOT match",
+    want: false,
+    line: line("GB00 WEST 1234 5698 7654 32"),
+  },
+  {
+    name: "Chinese unified social credit code",
+    want: true,
+    line: line("91110105MA0012345R"),
+  },
+  {
+    name: "Invalid social credit checksum must NOT match",
+    want: false,
+    line: line("91110105MA00123456"),
+  },
+  {
+    name: "Labelled tax ID",
+    want: true,
+    line: line("Tax ID: 12-3456789"),
+  },
+  {
+    name: "Labelled bank account",
+    want: true,
+    line: line("Bank Account: 123456789012"),
+  },
+  {
     name: "Date must NOT match",
     want: false,
     line: line("2026-08-12 14:30", [
@@ -67,9 +145,9 @@ const cases = [
 
 let pass = 0;
 for (const c of cases) {
-  const zones = detectSensitiveZones([c.line], { strictness: 2 });
+  const zones = detectSensitiveZones(c.lines || [c.line], { strictness: 2 });
   const got = zones.length > 0;
-  const ok = got === c.want;
+  const ok = got === c.want && (c.wantZones == null || zones.length === c.wantZones);
   if (ok) pass++;
   console.log(`${ok ? "PASS" : "FAIL"}  ${c.name}  → detected=${got} zones=${zones.length}`);
   for (const z of zones) console.log(`      ${z.severity} ${z.label}`);

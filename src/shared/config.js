@@ -2,6 +2,7 @@
 import { STORAGE_KEYS } from "./constants.js";
 
 export const DEFAULT_SETTINGS = {
+  uiLanguage: "zh-CN",
   enabled: true,
   // 1 = lenient … 3 = strict (see sensitive.js)
   strictness: 2,
