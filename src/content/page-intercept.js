@@ -10,8 +10,6 @@ const processedHandles = new WeakMap();
 let enabled = false;
 let nextId = 1;
 
-console.log("[PGR:picker] MAIN-world script loaded (0.1.4)");
-
 function firstImage(files) {
   return Array.from(files || []).find((file) => /^image\//.test(file.type));
 }
@@ -34,7 +32,6 @@ function intercept(input, event) {
   const requestId = `${Date.now()}-${nextId++}`;
   requestIds.set(input, requestId);
   pending.set(requestId, { input });
-  console.log(`[PGR:picker] intercepted attachment, size=${file.size}B type=${file.type}`);
   window.postMessage({ channel: CHANNEL, action: "selected", requestId, file }, "*");
 }
 
@@ -44,7 +41,6 @@ function processPickedFile(file) {
   return new Promise((resolve, reject) => {
     const requestId = `${Date.now()}-${nextId++}`;
     pending.set(requestId, { resolve, reject });
-    console.log(`[PGR:picker] intercepted FileSystem attachment, size=${file.size}B type=${file.type}`);
     window.postMessage({ channel: CHANNEL, action: "selected", requestId, file }, "*");
   });
 }
@@ -113,7 +109,6 @@ window.addEventListener("message", (event) => {
 
   if (event.data.action === "configure") {
     enabled = !!event.data.enabled;
-    if (enabled) console.log("[PGR:picker] MAIN-world interceptor enabled");
     return;
   }
 

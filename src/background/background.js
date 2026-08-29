@@ -99,7 +99,6 @@ chrome.runtime.onConnect.addListener((port) => {
       let result;
       try {
         await ensureOffscreenDocument();
-        console.log("[PGR:background] offscreen ready, forwarding OCR request");
         result = await chrome.runtime.sendMessage({ ...msg, type: "pgr-ocr-exec" });
       } catch (err) {
         console.error("[PGR:background] OCR relay failed:", err);

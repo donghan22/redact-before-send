@@ -159,10 +159,7 @@ async function runPipeline(originalEvent, file, kind, input, onImage) {
 async function processImage(originalEvent, file, kind, input, onImage) {
   try {
     const decision = await onImage({ file, kind, input, event: originalEvent });
-    if (!decision || decision.action === "block") {
-      console.log("[PGR] pipeline: blocked/cancelled, not reinjecting");
-      return null;
-    }
+    if (!decision || decision.action === "block") return null;
     return (
       decision.action === "replace" && decision.blob
         ? new File([decision.blob], baseName(file.name), { type: "image/png" })
@@ -192,7 +189,6 @@ function installPageBridge(onImage) {
  * SAFE_FLAG. `kind` matches the original trigger. Returns void.
  */
 function reinject(originalEvent, kind, input, file) {
-  console.log(`[PGR] reinjecting via "${kind}", file size=${file.size}B`);
   const dt = new DataTransfer();
   dt.items.add(file);
 
@@ -201,8 +197,7 @@ function reinject(originalEvent, kind, input, file) {
     for (const type of ["input", "change"]) {
       const ev = new Event(type, { bubbles: true, cancelable: true, composed: true });
       markSafe(ev);
-      const dispatched = input.dispatchEvent(ev);
-      console.log(`[PGR] reinject via input.files+${type} dispatched=${dispatched} isTrusted=${ev.isTrusted}`);
+      input.dispatchEvent(ev);
     }
     return;
   }
@@ -220,8 +215,7 @@ function reinject(originalEvent, kind, input, file) {
       cancelable: true,
     });
     markSafe(ev);
-    const dispatched = target.dispatchEvent(ev);
-    console.log(`[PGR] reinject via synthetic paste on`, target, `dispatched=${dispatched} isTrusted=${ev.isTrusted}`);
+    target.dispatchEvent(ev);
   } else if (kind === "drop") {
     const ev = new DragEvent("drop", {
       dataTransfer: dt,
@@ -231,8 +225,7 @@ function reinject(originalEvent, kind, input, file) {
       clientY: originalEvent?.clientY ?? 0,
     });
     markSafe(ev);
-    const dispatched = target.dispatchEvent(ev);
-    console.log(`[PGR] reinject via synthetic drop on`, target, `dispatched=${dispatched} isTrusted=${ev.isTrusted}`);
+    target.dispatchEvent(ev);
   }
 }
 

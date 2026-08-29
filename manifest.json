@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Privacy Guard Rails — PII Auto-Redact",
   "version": "0.1.4",
-  "description": "Zero-data-leak guard: detects and auto-redacts sensitive info (API keys, ID numbers, phones) in images before they are uploaded to AI chat platforms. 100% local, offline capable.",
+  "description": "Locally detects and redacts sensitive text in images before upload to supported AI chat platforms.",
   "permissions": ["storage", "offscreen"],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' 'wasm-unsafe-eval'; object-src 'self'"

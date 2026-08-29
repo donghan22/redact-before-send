@@ -1,10 +1,12 @@
 node_modules/
 dist/
+release/
 # ~30MB OCR language data — regenerate with `npm run fetch-assets`
 assets/tesseract/*.traineddata.gz
 assets/tesseract/*.wasm
 assets/tesseract/*.wasm.js
 assets/tesseract/tesseract-worker.js
+assets/tesseract/*.download
 # tesseract.js (Node) decompresses traineddata into cwd as a runtime cache
 *.traineddata
 .DS_Store

@@ -72,8 +72,3 @@ export async function ocrLines(blob, settings) {
   if (!res.ok) throw new Error(res.error || "OCR failed");
   return { lines: res.lines, ms: res.ms };
 }
-
-// No-op: OCR runs in the offscreen document (owned by the background
-// service worker), not a worker spawned by this content script. Kept so
-// content.js doesn't need to change its pagehide cleanup call.
-export function disposeOcr() {}

@@ -5,252 +5,186 @@
 <h1 align="center">Privacy Guard Rails</h1>
 
 <p align="center">
-  Detect, review, and redact sensitive information locally before an image enters an AI chat.<br />
-  Local OCR · No cloud detection API · Works offline
+  Detect and redact sensitive text locally before an image enters an AI chat.<br />
+  Local OCR · No cloud detection API · Offline after installation
 </p>
 
 <p align="center">
   <img alt="Chrome MV3" src="https://img.shields.io/badge/Chrome-MV3-2563eb?style=flat-square" />
   <img alt="Local OCR" src="https://img.shields.io/badge/OCR-Tesseract.js-15803d?style=flat-square" />
   <img alt="Languages" src="https://img.shields.io/badge/UI-中文%20%7C%20English-7c3aed?style=flat-square" />
-  <img alt="Tests" src="https://img.shields.io/badge/rule_tests-20%2F20-brightgreen?style=flat-square" />
 </p>
 
 <p align="center">
   <a href="./README.zh-CN.md">简体中文</a> · <strong>English</strong>
 </p>
 
----
+Privacy Guard Rails is a Manifest V3 extension for ChatGPT, Claude, DeepSeek,
+and Gemini. It intercepts pasted, dropped, or attached images, runs Tesseract
+OCR locally, and checks the extracted text with formats, context, and checksums.
 
-Privacy Guard Rails is a Manifest V3 browser extension that intercepts images before
-they are submitted to ChatGPT, Claude, DeepSeek, or Gemini. It extracts text with a
-local Tesseract OCR worker, then uses checksums, regular expressions, and contextual
-rules to locate potentially sensitive regions.
-
-When a risk is found, the user can:
-
-- cancel the upload;
-- ignore the warning and upload the original;
-- automatically mosaic detected regions and review the result;
-- drag over any additional region in the preview before uploading the safe version.
+When a risk is found, the user can cancel, upload the original, or review an
+automatically mosaicked copy and add more redactions manually.
 
 > [!IMPORTANT]
-> This extension is a pre-upload safety aid, not a complete enterprise DLP system.
-> Read [Limitations](#limitations) before using it in a sensitive workflow. It must
-> not be treated as a guarantee that every secret will be detected.
+> This is a pre-upload safety aid, not an enterprise DLP system. OCR and rules
+> can miss information; read [Limitations](#limitations) before sensitive use.
 
-## Detection Preview
+## Features
 
-<p align="center">
-  <img src="./docs/detection-examples.svg" width="900" alt="Synthetic API key, identity number, and IBAN detection and redaction examples" />
-</p>
+- Local English and Simplified Chinese OCR; no image is sent to a detection API.
+- Paste, drop, and attachment-button interception on four AI chat platforms.
+- Bilingual popup, risk review, and redaction preview.
+- Automatic mosaic plus manual draw and undo before upload.
+- Rules for credentials, private keys, identity data, contact details, financial
+  data, crypto addresses, and custom keywords.
 
-The illustration uses synthetic values only. It contains no real identity number,
-bank account, or secret.
+Context-dependent values such as passport, tax, and bank-account numbers are
+reported only when a nearby Chinese or English field label is present. Payment
+cards, Chinese IDs, IBANs, and Chinese business credit codes use checksums.
 
-## Core Flow
+## Detection Examples
+
+These are real outputs from the current local OCR and rule engine at the default
+detection level. Sources and licenses are listed in
+[ATTRIBUTION.md](./docs/examples/ATTRIBUTION.md).
+
+<table>
+  <thead>
+    <tr><th>Source image</th><th>Redaction result</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><img src="./docs/examples/china-id-original.jpg" width="420" alt="Chinese ID specimen before detection" /></td>
+      <td><img src="./docs/examples/china-id-redacted.jpg" width="420" alt="Chinese ID number after mosaic redaction" /></td>
+    </tr>
+    <tr>
+      <td><img src="./docs/examples/email-original.png" width="420" alt="Public business email before detection" /></td>
+      <td><img src="./docs/examples/email-redacted.png" width="420" alt="Email address after mosaic redaction" /></td>
+    </tr>
+    <tr>
+      <td><img src="./docs/examples/smtp-original.png" width="420" alt="SMTP documentation screenshot before detection" /></td>
+      <td><img src="./docs/examples/smtp-redacted.png" width="420" alt="Example email addresses after mosaic redaction" /></td>
+    </tr>
+    <tr>
+      <td><img src="./docs/examples/visa-original.png" width="420" alt="Visa test card before detection" /></td>
+      <td><img src="./docs/examples/visa-redacted.png" width="420" alt="Visa test card number after mosaic redaction" /></td>
+    </tr>
+  </tbody>
+</table>
+
+Reproducible results: one checksum-valid Chinese ID, one email address, six
+SMTP example addresses, and one Luhn-valid Visa test-card number.
+
+## How It Works
 
 ~~~mermaid
 flowchart LR
-    A["Paste / Drop / Attach image"] --> B["Pre-upload interception"]
-    B --> C["Local OCR<br/>English + Simplified Chinese"]
-    C --> D["Rules, context, and checksums"]
-    D --> E{"Risk found?"}
-    E -- No --> F["Continue the original upload flow"]
-    E -- Yes --> G["Bilingual review UI<br/>Highlight detected regions"]
-    G --> H["Cancel"]
-    G --> I["Ignore and upload original"]
-    G --> J["Auto-redact and review"]
-    J --> K["Add manual redactions"]
-    K --> L["Upload safe version"]
+    A["Paste / Drop / Attach"] --> B["Intercept image"]
+    B --> C["Local OCR"]
+    C --> D["Rules + checksums"]
+    D --> E{"Risk?"}
+    E -- No --> F["Continue upload"]
+    E -- Yes --> G["Review"]
+    G --> H["Mosaic + manual edits"]
+    H --> F
 ~~~
 
-## What It Detects
-
-The current engine contains **22 structured rules**, dedicated PEM/SSH private-key
-block handling, built-in keywords, and user-defined sensitive terms.
-
-| Category | Current coverage | False-positive controls |
-|---|---|---|
-| API and cloud credentials | OpenAI, Anthropic, AWS, Google, GitHub, JWT | Vendor prefixes and length constraints |
-| Authentication credentials | OAuth, access/refresh tokens, bearer tokens, session cookies | Field context and token formats |
-| Private keys and databases | PEM, RSA, EC, DSA, OpenSSH private keys; database URLs | Redacts the complete key block from <code>BEGIN</code> through <code>END</code> |
-| Identity and contact data | Chinese IDs, passports, US SSNs, Chinese phone numbers, email addresses | ID checksum, invalid SSN filtering, and field context |
-| Business identifiers | Chinese unified social credit codes and tax identifiers | MOD 31-3 checksum or field context |
-| Financial data | Payment cards, bank accounts, IBANs, BTC and ETH addresses | Luhn, IBAN MOD-97, and field context |
-| Document keywords | Confidential, internal use, financial reports, and similar terms | Built-in and user-defined keyword lists |
-
-Passport numbers, generic tax identifiers, and bank-account numbers do not have one
-global format. They are detected only when OCR also finds a nearby label such as
-<code>Passport No</code>, <code>Tax ID</code>, <code>Bank Account</code>,
-<code>护照号码</code>, <code>税号</code>, or <code>银行账号</code>.
+OCR runs in an extension offscreen document with bundled Tesseract WASM and
+`eng` / `chi_sim` models. Images are scaled to a maximum side of 1440 px for
+OCR, and detected coordinates are mapped back to the original image.
 
 ## Supported Websites
 
-| Website | Domain | Paste | Drop | Attachment button |
+| Website | Domain | Paste | Drop | Attachment |
 |---|---|:---:|:---:|:---:|
-| ChatGPT | <code>chatgpt.com</code> | ✓ | ✓ | ✓, including MAIN-world and File System paths |
-| Claude | <code>claude.ai</code> | ✓ | ✓ | ✓ |
-| DeepSeek | <code>chat.deepseek.com</code> | ✓ | ✓ | ✓ |
-| Gemini | <code>gemini.google.com</code> | ✓ | ✓ | ✓ |
+| ChatGPT | `chatgpt.com` | ✓ | ✓ | ✓ |
+| Claude | `claude.ai` | ✓ | ✓ | ✓ |
+| DeepSeek | `chat.deepseek.com` | ✓ | ✓ | ✓ |
+| Gemini | `gemini.google.com` | ✓ | ✓ | ✓ |
 
-Web applications change continuously. Re-run end-to-end browser checks after a
-browser or website update.
+Website upload implementations change. Re-test after major browser or site updates.
 
-## Local Privacy Architecture
+## Install
 
-~~~mermaid
-flowchart TB
-    subgraph PAGE["AI chat page"]
-      M["MAIN world<br/>Attachment-picker interception"]
-      I["Isolated content script<br/>Orchestration + Shadow DOM UI"]
-    end
+### Release package
 
-    M <-->|"In-page bridge"| I
-    I <-->|"chrome.runtime Port"| B["MV3 background service worker"]
-    B <-->|"OCR request / result"| O["Offscreen document"]
-    O --> W["Tesseract Worker<br/>WASM SIMD LSTM"]
-    W --> O
-    I --> R["Canvas mosaic<br/>Generate safe image"]
-~~~
+1. Download and extract the latest ZIP from
+   [GitHub Releases](https://github.com/donghan22/redact-before-send/releases).
+2. Open `chrome://extensions` or `edge://extensions`.
+3. Enable **Developer mode**, select **Load unpacked**, and choose the extracted
+   folder containing `manifest.json`.
 
-- OCR engine: <code>tesseract.js 5.1.1</code>.
-- Bundled models: <code>assets/tesseract/eng.traineddata.gz</code> and
-  <code>assets/tesseract/chi_sim.traineddata.gz</code>.
-- Images are downscaled to a maximum side of <code>1440px</code> for OCR; detected
-  coordinates are mapped back to original-image pixels.
-- Runtime detection does not call a cloud OCR or external detection API.
-- Extension permissions are <code>storage</code> and <code>offscreen</code>; content
-  script access is limited to the supported AI-chat domains above.
-- The extension actively reinjects an original or redacted image only after the user
-  chooses to continue.
+The release ZIP includes compiled code and all OCR runtime files.
 
-<code>npm run setup</code> downloads about 30 MB of English and Simplified Chinese
-OCR model data during setup. Once stored in the repository, runtime OCR works
-offline.
-
-## Installation
+### Build from source
 
 ~~~bash
-git clone <your-repository-url>
-cd pri_image
+git clone https://github.com/donghan22/redact-before-send.git
+cd redact-before-send
 npm run setup
 ~~~
 
-Then:
+Load the repository root as an unpacked extension. After source changes, run
+`npm run build`, reload the extension, and refresh open chat tabs.
 
-1. Open <code>chrome://extensions</code>; use <code>edge://extensions</code> in Edge.
-2. Enable **Developer mode**.
-3. Select **Load unpacked**.
-4. Choose the repository root.
-5. Open a supported website and test paste, drop, and attachment upload with a
-   synthetic image.
+`npm run setup` installs dependencies, downloads about 36 MB of pinned OCR
+assets, verifies their size and SHA-256 digest, and builds the extension.
 
-After editing the source:
+## Verify and Package
 
 ~~~bash
+npm test
+npm run verify:assets
+npm run test:ocr -- /path/to/image.jpg
 npm run build
+npm run package:extension
 ~~~
 
-Select **Reload** on the extension management page. Reload open chat tabs as well so
-the new content scripts are injected.
-
-## Settings and Interaction
-
-- The extension popup supports Chinese and English, and persists the UI language in
-  local browser storage.
-- Protection can be paused globally or enabled per website.
-- OCR can load English, Simplified Chinese, or both.
-- Users can configure detection level and organization-specific keywords.
-- In-page risk review and redaction preview follow the popup language.
-- After auto-redaction, users can draw additional regions, undo, and approve the
-  final upload.
-
-## Verification
-
-~~~bash
-npm run test:scan       # 20 positive and negative rule cases
-npm run test:popup      # popup Chinese/English dictionary completeness
-npm run test:overlay    # review UI translations and zone-label completeness
-npm run test:ocr -- /path/to/test-image.jpg
-npm run build
-~~~
-
-Current rule checks include:
-
-~~~text
-PASS  PEM private key block
-PASS  OAuth access token
-PASS  Session cookie
-PASS  Database connection string
-PASS  US SSN / invalid SSN
-PASS  IBAN / invalid IBAN checksum
-PASS  Chinese unified social credit code / invalid checksum
-PASS  Date must NOT match
-PASS  Long random digits must NOT match
-...
-20/20 passed
-~~~
+The ready-to-install archive is written to `release/`. CI runs the same asset,
+test, build, and packaging checks.
 
 ## Project Structure
 
 ~~~text
-pri_image/
-├── assets/tesseract/          # WASM, worker, eng / chi_sim OCR models
-├── docs/                      # README visual assets
-├── src/
-│   ├── background/            # Offscreen lifecycle and OCR relay
-│   ├── content/               # Interception, bilingual review UI, redaction preview
-│   ├── engine/                # OCR client and Canvas mosaic
-│   ├── offscreen/             # Tesseract Worker execution environment
-│   ├── popup/                 # Bilingual extension settings
-│   └── shared/                # Configuration, detection rules, checksums
-├── scripts/                   # Model setup and runnable checks
-├── manifest.json
-└── esbuild.mjs
+assets/                 icons and generated Tesseract runtime assets
+docs/                   README images and attribution
+src/background/         offscreen lifecycle and OCR relay
+src/content/            upload interception and in-page review UI
+src/engine/             OCR client and canvas mosaic
+src/offscreen/          Tesseract worker environment
+src/popup/              bilingual extension settings
+src/shared/             configuration, rules, and checksums
+scripts/                asset, test, and release utilities
+manifest.json           Chrome MV3 manifest
+esbuild.mjs             extension bundler
 ~~~
+
+## Release
+
+Keep the version in `manifest.json`, `package.json`, and `package-lock.json`
+identical, then push a matching tag:
+
+~~~bash
+git tag -a v0.1.4 -m "Privacy Guard Rails v0.1.4"
+git push origin v0.1.4
+~~~
+
+The release workflow publishes `privacy-guard-rails-v<version>.zip`.
 
 ## Limitations
 
-1. **OCR can miss or misread text.** Blur, rotation, glare, low contrast, complex
-   backgrounds, and very small text reduce accuracy. Text that OCR misses never
-   reaches the rule engine.
-2. **The current error policy is fail-open.** If OCR initialization or execution
-   fails, the original image is allowed through. This is not suitable as a mandatory
-   compliance gateway.
-3. **Only the first image in one selection is fully processed.** Multi-image uploads
-   still need dedicated handling.
-4. **The engine understands text, not visual objects.** Faces, signatures,
-   fingerprints, license plates, document portraits, QR codes, and barcodes are not
-   reliably detected.
-5. **There is no cross-line semantic model.** Values split into words on one line can
-   be reconstructed, but addresses, keys, or account numbers split across lines may
-   be missed. PEM/SSH private-key blocks are a dedicated exception.
-6. **Contextual rules have regional limits.** SSN currently means a US number.
-   Passport, tax-ID, and bank-account rules depend on Chinese or English field
-   labels and do not cover every country.
-7. **Website upload implementations can change.** Updates involving
-   <code>event.isTrusted</code>, Shadow DOM, the File System API, or other frontend
-   behavior may affect reinjection and require real-browser regression testing.
-8. **EXIF cleanup is not explicit yet.** Generated PNG redactions generally omit the
-   source EXIF data, but choosing “ignore and upload original” preserves original
-   metadata.
+- OCR may miss blurred, rotated, reflective, low-contrast, or very small text.
+- OCR failures currently fail open and allow the original image through.
+- Only the first image in a multi-image selection is fully processed.
+- Faces, signatures, fingerprints, portraits, license plates, QR codes, and
+  barcodes are not detected reliably.
+- Values split across lines and unsupported regional formats may be missed.
+- Ignoring a warning uploads the original file with its original metadata.
+- Website frontend changes can break interception or reinjection.
 
-## Roadmap
+## License
 
-- [x] Paste, drop, and attachment-button interception
-- [x] Local English and Simplified Chinese OCR with sensitive-region coordinates
-- [x] Automatic mosaic, result preview, and manual redaction
-- [x] Chinese/English popup and in-page review interfaces
-- [x] API credentials, private keys, identity, tax, and financial rules
-- [ ] Multi-image processing
-- [ ] Optional fail-closed policy
-- [ ] Explicit EXIF metadata removal
-- [ ] QR-code and barcode parsing
-- [ ] Face, signature, and license-plate detection
-- [ ] Demo GIF recorded from a real end-to-end browser flow
+[MIT](LICENSE)
 
----
-
-Built with <code>tesseract.js</code> and <code>esbuild</code>. Not affiliated with OpenAI,
-Anthropic, DeepSeek, or Google.
+Built with `tesseract.js` and `esbuild`.
